@@ -1,0 +1,5 @@
+/build
+/config.json
+/dist
+/main.spec
+/__pycache__
