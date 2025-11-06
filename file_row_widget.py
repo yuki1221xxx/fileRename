@@ -14,7 +14,6 @@ class FileRowWidget:
         self.master = master
         self.on_delete = on_delete
 
-        # ここでその時点のrowだけ読む（他の行は読み込まない）
         row_conf = get_row_config(row_index)
         now = datetime.now()
 
@@ -24,7 +23,13 @@ class FileRowWidget:
 
         self.year = tk.StringVar(value=row_conf.get("year", str(now.year)))
         self.month = tk.StringVar(value=row_conf.get("month", f"{now.month:02}"))
-        self.use_date = tk.BooleanVar(value=row_conf.get("use_date", True))
+        self.day = tk.StringVar(value=row_conf.get("day", f"{now.day:02}"))
+
+        # 個別日付チェック
+        self.use_year = tk.BooleanVar(value=row_conf.get("use_year", True))
+        self.use_month = tk.BooleanVar(value=row_conf.get("use_month", True))
+        self.use_day = tk.BooleanVar(value=row_conf.get("use_day", False))
+
         self.use_underscores = tk.BooleanVar(value=row_conf.get("use_underscores", True))
 
         saved_selected = row_conf.get("selected_file_path", "")
@@ -47,25 +52,22 @@ class FileRowWidget:
         card.grid(row=self.row_index, column=0, sticky="nsew", padx=5, pady=5)
         self.master.columnconfigure(0, weight=1)
 
-        # 0..3: 内容, 4: 削除ボタン
         for i in range(4):
             card.columnconfigure(i, weight=1)
         card.columnconfigure(4, weight=0)
 
-        # 削除ボタン
         del_btn = tb.Button(card, text="×", width=3, bootstyle="danger", command=self._on_delete_clicked)
         del_btn.grid(row=0, column=4, sticky="ne", padx=(4, 0), pady=(0, 4))
 
         # ① 走査元
         source_frame = tb.Labelframe(card, text="① 走査元フォルダ", bootstyle="secondary")
         source_frame.grid(row=0, column=0, sticky="nsew", padx=3, pady=3)
-        source_frame.columnconfigure(0, weight=0)
         source_frame.columnconfigure(1, weight=1)
         source_frame.rowconfigure(2, weight=1)
 
-        tb.Button(source_frame, text="フォルダ選択", bootstyle="primary", command=self.choose_source_folder) \
+        tb.Button(source_frame, text="フォルダ選択", bootstyle="primary", command=self.choose_source_folder)\
             .grid(row=0, column=0, sticky="w", pady=2)
-        tb.Entry(source_frame, textvariable=self.source_path, state="readonly") \
+        tb.Entry(source_frame, textvariable=self.source_path, state="readonly")\
             .grid(row=0, column=1, sticky="ew", padx=5)
 
         self.file_listbox = tk.Listbox(source_frame, height=4, exportselection=False)
@@ -76,8 +78,6 @@ class FileRowWidget:
         info_frame = tb.Labelframe(card, text="② ファイル情報", bootstyle="info")
         info_frame.grid(row=0, column=1, sticky="nsew", padx=3, pady=3)
         info_frame.columnconfigure(0, weight=1)
-        info_frame.rowconfigure(0, weight=1)
-
         self.info_label = tb.Label(info_frame, text="ファイル情報がここに表示されます", anchor="nw", justify="left")
         self.info_label.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
 
@@ -92,54 +92,68 @@ class FileRowWidget:
         base_entry.bind("<KeyRelease>", lambda e: self._on_base_name_change())
 
         tb.Label(rename_frame, text="プレビュー:").grid(row=2, column=0, sticky="w")
-        tb.Label(rename_frame, textvariable=self.preview_name, bootstyle="info", anchor="w", justify="left") \
+        tb.Label(rename_frame, textvariable=self.preview_name, bootstyle="info", anchor="w", justify="left")\
             .grid(row=3, column=0, sticky="w", pady=(0, 6))
 
-        tb.Checkbutton(rename_frame, text="日付を付加する", variable=self.use_date, command=self._on_use_date_change) \
-            .grid(row=4, column=0, sticky="w")
+        # ---- 新チェックボックス群 ----
+        date_frame = tb.Labelframe(rename_frame, text="日付要素", bootstyle="secondary")
+        date_frame.grid(row=4, column=0, sticky="w", pady=3)
 
-        date_frame = tb.Frame(rename_frame)
-        date_frame.grid(row=5, column=0, sticky="w", pady=3)
+        tb.Checkbutton(date_frame, text="西暦", variable=self.use_year,
+                       command=self._on_date_flag_change).pack(side="left", padx=(0, 5))
+        tb.Checkbutton(date_frame, text="月", variable=self.use_month,
+                       command=self._on_date_flag_change).pack(side="left", padx=(0, 5))
+        tb.Checkbutton(date_frame, text="日", variable=self.use_day,
+                       command=self._on_date_flag_change).pack(side="left", padx=(0, 5))
+
+        combo_frame = tb.Frame(rename_frame)
+        combo_frame.grid(row=5, column=0, sticky="w", pady=3)
         tb.Combobox(
-            date_frame,
+            combo_frame,
             textvariable=self.year,
             values=[str(y) for y in range(datetime.now().year - 5, datetime.now().year + 6)],
             width=6,
             state="readonly"
         ).pack(side="left", padx=(0, 3))
         tb.Combobox(
-            date_frame,
+            combo_frame,
             textvariable=self.month,
             values=[f"{m:02}" for m in range(1, 13)],
             width=4,
             state="readonly"
         ).pack(side="left", padx=(0, 3))
+        tb.Combobox(
+            combo_frame,
+            textvariable=self.day,
+            values=[f"{d:02}" for d in range(1, 32)],
+            width=4,
+            state="readonly"
+        ).pack(side="left")
 
         self.year.trace_add("write", lambda *_: self._on_date_change())
         self.month.trace_add("write", lambda *_: self._on_date_change())
+        self.day.trace_add("write", lambda *_: self._on_date_change())
 
         tb.Checkbutton(rename_frame, text="区切りにアンダーバーを使用",
-                       variable=self.use_underscores, command=self._on_underscore_change) \
+                       variable=self.use_underscores, command=self._on_underscore_change)\
             .grid(row=6, column=0, sticky="w", pady=(4, 0))
 
         # ④ 移動先 & 実行
         action_frame = tb.Labelframe(card, text="④ 移動先 & 実行", bootstyle="warning")
         action_frame.grid(row=0, column=3, sticky="nsew", padx=3, pady=3)
         action_frame.columnconfigure(0, weight=1)
-
-        tb.Button(action_frame, text="移動先選択", command=self.choose_dest_folder) \
+        tb.Button(action_frame, text="移動先選択", command=self.choose_dest_folder)\
             .grid(row=0, column=0, sticky="w", pady=(0, 3))
-        tb.Entry(action_frame, textvariable=self.dest_path, state="readonly") \
+        tb.Entry(action_frame, textvariable=self.dest_path, state="readonly")\
             .grid(row=1, column=0, sticky="ew", pady=(0, 5))
-
         btn_row = tb.Frame(action_frame)
         btn_row.grid(row=2, column=0, sticky="w")
-        tb.Button(btn_row, text="実行", bootstyle="success", command=self.execute) \
+        tb.Button(btn_row, text="実行", bootstyle="success", command=self.execute)\
             .pack(side="left", padx=(0, 5))
         self.status_label = tb.Label(btn_row, text="", bootstyle="success")
         self.status_label.pack(side="left")
 
-    # ===== 削除ボタン =====
+    # ===== 基本動作 =====
     def _on_delete_clicked(self):
         if self.on_delete:
             self.on_delete(self.row_index)
@@ -147,14 +161,12 @@ class FileRowWidget:
     def destroy(self):
         self.card.destroy()
 
-    # ===== ステータス表示 =====
     def show_status(self, message, style="success"):
         self.status_label.config(text=message, bootstyle=style)
         if self.status_after_id:
             self.master.after_cancel(self.status_after_id)
         self.status_after_id = self.master.after(3000, lambda: self.status_label.config(text=""))
 
-    # ===== フォルダ選択 =====
     def choose_source_folder(self):
         folder = filedialog.askdirectory()
         if folder:
@@ -168,7 +180,6 @@ class FileRowWidget:
             self.dest_path.set(folder)
             update_row_fields(self.row_index, dest_path=folder)
 
-    # ===== 自動リロード =====
     def _start_auto_reload(self):
         self._update_file_list()
         self.master.after(3000, self._start_auto_reload)
@@ -187,7 +198,6 @@ class FileRowWidget:
             for f in current_files:
                 self.file_listbox.insert(tk.END, f)
 
-    # ===== ファイル選択 =====
     def on_file_select(self, event):
         sel = self.file_listbox.curselection()
         if not sel:
@@ -195,20 +205,13 @@ class FileRowWidget:
         filename = self.file_listbox.get(sel[0])
         full_path = os.path.join(self.source_path.get(), filename)
         self.selected_file = full_path
-
         ext = Path(filename).suffix
         size = os.path.getsize(full_path)
         mod_time = datetime.fromtimestamp(os.path.getmtime(full_path))
-
         info = (
-            f"{filename}\n"
-            f"拡張子: {ext}\n"
-            f"サイズ: {size:,} bytes\n"
-            f"更新日時: {mod_time.strftime('%Y-%m-%d %H:%M')}"
+            f"{filename}\n拡張子: {ext}\nサイズ: {size:,} bytes\n更新日時: {mod_time.strftime('%Y-%m-%d %H:%M')}"
         )
         self.info_label.config(text=info)
-
-        # まとめて保存（この行だけ上書き）
         update_row_fields(
             self.row_index,
             selected_file_path=full_path,
@@ -217,44 +220,47 @@ class FileRowWidget:
             selected_file_size=size,
             selected_file_mtime=mod_time.isoformat(),
         )
-
         self.update_preview_name()
 
-    # ===== 各種変更 =====
     def _on_base_name_change(self):
         update_row_fields(self.row_index, base_name=self.base_name.get())
         self.update_preview_name()
 
     def _on_date_change(self):
-        update_row_fields(self.row_index, year=self.year.get(), month=self.month.get())
+        update_row_fields(self.row_index,
+                          year=self.year.get(), month=self.month.get(), day=self.day.get())
         self.update_preview_name()
 
-    def _on_use_date_change(self):
-        update_row_fields(self.row_index, use_date=self.use_date.get())
+    def _on_date_flag_change(self):
+        update_row_fields(self.row_index,
+                          use_year=self.use_year.get(),
+                          use_month=self.use_month.get(),
+                          use_day=self.use_day.get())
         self.update_preview_name()
 
     def _on_underscore_change(self):
         update_row_fields(self.row_index, use_underscores=self.use_underscores.get())
         self.update_preview_name()
 
-    # ===== プレビュー更新 =====
     def update_preview_name(self):
         name = self.base_name.get()
         sep = "_" if self.use_underscores.get() else ""
-        if self.use_date.get():
-            date_part = sep.join([self.year.get(), self.month.get()])
-            if name:
-                name = f"{name}{sep}{date_part}"
-            else:
-                name = date_part
 
-        ext = ""
-        if self.selected_file:
-            ext = Path(self.selected_file).suffix
+        parts = []
+        if self.use_year.get():
+            parts.append(self.year.get())
+        if self.use_month.get():
+            parts.append(self.month.get())
+        if self.use_day.get():
+            parts.append(self.day.get())
 
+        if parts:
+            date_part = sep.join(parts)
+            name = f"{name}{sep}{date_part}" if name else date_part
+
+        ext = Path(self.selected_file).suffix if self.selected_file else ""
         self.preview_name.set(f"{name}{ext}")
 
-    # ===== 実行 =====
     def execute(self):
         if not self.selected_file:
             self.show_status("⚠ ファイル未選択", style="danger")
@@ -262,7 +268,6 @@ class FileRowWidget:
         if not self.dest_path.get():
             self.show_status("⚠ 移動先未選択", style="danger")
             return
-
         new_name = self.preview_name.get()
         dest_file = os.path.join(self.dest_path.get(), new_name)
         try:
