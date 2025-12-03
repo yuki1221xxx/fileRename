@@ -37,23 +37,22 @@ class FileRowWidget:
 
         self.preview_name = tk.StringVar()
         self.status_after_id = None
+        self._reload_job = None
 
         self._build_row()
-        self._start_auto_reload()
+        # Defer the first reload until the UI is idle so startup feels lighter.
+        self.master.after_idle(self._start_auto_reload)
         self.update_preview_name()
-
-        if os.path.isdir(self.source_path.get()):
-            self._update_file_list()
 
     # ===== UI build =====
     def _build_row(self):
-        card = tb.Frame(self.master, bootstyle="light", borderwidth=2, relief="ridge", padding=5)
+        card = tb.Frame(self.master, bootstyle="light", borderwidth=2, relief="ridge", padding=8)
         self.card = card
         card.grid(row=self.row_index, column=0, sticky="nsew", padx=5, pady=5)
         self.master.columnconfigure(0, weight=1)
 
         for i in range(4):
-            card.columnconfigure(i, weight=1)
+            card.columnconfigure(i, weight=1, uniform="cardcols")
         card.columnconfigure(4, weight=0)
 
         del_btn = tb.Button(card, text="×", width=3, bootstyle="danger", command=self._on_delete_clicked)
@@ -70,7 +69,7 @@ class FileRowWidget:
         tb.Entry(source_frame, textvariable=self.source_path, state="readonly")\
             .grid(row=0, column=1, sticky="ew", padx=5)
 
-        self.file_listbox = tk.Listbox(source_frame, height=4, exportselection=False)
+        self.file_listbox = tk.Listbox(source_frame, height=6, exportselection=False, font=("Meiryo UI", 11))
         self.file_listbox.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=5)
         self.file_listbox.bind("<<ListboxSelect>>", self.on_file_select)
 
@@ -78,7 +77,13 @@ class FileRowWidget:
         info_frame = tb.Labelframe(card, text="② ファイル情報", bootstyle="info")
         info_frame.grid(row=0, column=1, sticky="nsew", padx=3, pady=3)
         info_frame.columnconfigure(0, weight=1)
-        self.info_label = tb.Label(info_frame, text="ファイル情報がここに表示されます", anchor="nw", justify="left")
+        self.info_label = tb.Label(
+            info_frame,
+            text="ファイル情報がここに表示されます",
+            anchor="nw",
+            justify="left",
+            wraplength=260,
+        )
         self.info_label.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
 
         # ③ リネーム設定
@@ -92,8 +97,14 @@ class FileRowWidget:
         base_entry.bind("<KeyRelease>", lambda e: self._on_base_name_change())
 
         tb.Label(rename_frame, text="プレビュー:").grid(row=2, column=0, sticky="w")
-        tb.Label(rename_frame, textvariable=self.preview_name, bootstyle="info", anchor="w", justify="left")\
-            .grid(row=3, column=0, sticky="w", pady=(0, 6))
+        tb.Label(
+            rename_frame,
+            textvariable=self.preview_name,
+            bootstyle="info",
+            anchor="w",
+            justify="left",
+            wraplength=240,
+        ).grid(row=3, column=0, sticky="w", pady=(0, 6))
 
         # ---- 新チェックボックス群 ----
         date_frame = tb.Labelframe(rename_frame, text="日付要素", bootstyle="secondary")
@@ -159,6 +170,8 @@ class FileRowWidget:
             self.on_delete(self.row_index)
 
     def destroy(self):
+        if self._reload_job:
+            self.master.after_cancel(self._reload_job)
         self.card.destroy()
 
     def show_status(self, message, style="success"):
@@ -182,16 +195,17 @@ class FileRowWidget:
 
     def _start_auto_reload(self):
         self._update_file_list()
-        self.master.after(3000, self._start_auto_reload)
+        self._reload_job = self.master.after(3000, self._start_auto_reload)
 
     def _update_file_list(self):
         folder = self.source_path.get()
         if not os.path.isdir(folder):
             return
-        current_files = sorted(
-            f for f in os.listdir(folder)
-            if os.path.isfile(os.path.join(folder, f))
-        )
+        try:
+            with os.scandir(folder) as entries:
+                current_files = sorted(entry.name for entry in entries if entry.is_file())
+        except OSError:
+            return
         displayed = list(self.file_listbox.get(0, tk.END))
         if current_files != displayed:
             self.file_listbox.delete(0, tk.END)

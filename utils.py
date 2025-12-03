@@ -1,20 +1,40 @@
+import copy
 import json
 import os
 from datetime import datetime
 
 CONFIG_FILE = "config.json"
+_config_cache = None
 
 
-def load_config():
+def _load_from_disk():
+    """Read config from disk once. Caller clones before returning to keep behavior the same."""
     if not os.path.exists(CONFIG_FILE):
         return {}
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
+def _get_config_cache():
+    global _config_cache
+    if _config_cache is None:
+        _config_cache = _load_from_disk()
+    return _config_cache
+
+
+def load_config():
+    """
+    Load config with a tiny in-memory cache to avoid repeated disk I/O on startup.
+    Returns a deep copy so callers can mutate the result just like before.
+    """
+    return copy.deepcopy(_get_config_cache())
+
+
 def save_config(config):
+    global _config_cache
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4, ensure_ascii=False)
+    _config_cache = copy.deepcopy(config)
 
 
 def _make_row_template(now: datetime):
@@ -48,7 +68,7 @@ def get_row_indices():
     """
     config.jsonにある rowX の X をソートしたリストで返す。
     """
-    config = load_config()
+    config = _get_config_cache()
     indices = []
     for key in config.keys():
         if key.startswith("row"):
@@ -64,7 +84,7 @@ def add_row_config(index: int):
     """
     指定した index の行がまだなければ追加する。
     """
-    config = load_config()
+    config = _get_config_cache()
     key = f"row{index}"
     if key in config:
         return
@@ -88,7 +108,7 @@ def get_row_config(index: int):
     """
     指定されたrowだけを取得する。なければ空dict。
     """
-    config = load_config()
+    config = _get_config_cache()
     key = f"row{index}"
     return config.get(key, {}).copy()
 
