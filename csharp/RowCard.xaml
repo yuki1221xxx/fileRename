@@ -1,0 +1,197 @@
+<UserControl x:Class="FileRename.RowCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Meiryo UI">
+
+    <!-- カード外枠（影付き白カード） -->
+    <Border Background="White" CornerRadius="8" Margin="8,5">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="12" ShadowDepth="3"
+                              Direction="270" Color="#1A000000" Opacity="0.5"/>
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ── ヘッダーバー ─────────────────────── -->
+            <Border Grid.Row="0" Background="#495057" CornerRadius="8,8,0,0">
+                <DockPanel Margin="14,7">
+                    <Button x:Name="DeleteBtn" DockPanel.Dock="Right"
+                            Content="× 削除"
+                            Style="{StaticResource FlatBtn}"
+                            Background="#DC3545"
+                            FontSize="12" Padding="10,4"
+                            Click="DeleteBtn_Click"/>
+                    <TextBlock x:Name="RowHeader"
+                               Text="行 1"
+                               Foreground="White"
+                               FontWeight="Bold"
+                               FontSize="14"
+                               VerticalAlignment="Center"/>
+                </DockPanel>
+            </Border>
+
+            <!-- ── 2カラムボディ ─────────────────────── -->
+            <Grid Grid.Row="1" Margin="14,12,14,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="1"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- ═══ 左列：走査元フォルダ ═══ -->
+                <Grid Grid.Column="0" Margin="0,0,12,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="走査元フォルダ" Style="{StaticResource SecLabel}"/>
+
+                    <DockPanel Grid.Row="1" Margin="0,0,0,8" LastChildFill="True">
+                        <Button DockPanel.Dock="Left"
+                                Content="フォルダ選択"
+                                Style="{StaticResource FlatBtn}"
+                                Background="#0D6EFD"
+                                Padding="10,5"
+                                Margin="0,0,7,0"
+                                Click="SourceSelectBtn_Click"/>
+                        <TextBox x:Name="SourcePathBox"
+                                 Style="{StaticResource FlatEntry}"
+                                 Background="#F8F9FA"
+                                 IsReadOnly="True"/>
+                    </DockPanel>
+
+                    <!-- ファイルリスト -->
+                    <Border Grid.Row="2"
+                            BorderBrush="#CED4DA" BorderThickness="1"
+                            CornerRadius="4" Margin="0,0,0,8">
+                        <ListBox x:Name="FileListBox"
+                                 MinHeight="120"
+                                 BorderThickness="0"
+                                 Background="White"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling"
+                                 SelectionChanged="FileListBox_SelectionChanged"/>
+                    </Border>
+
+                    <!-- ファイル情報 -->
+                    <TextBlock x:Name="FileInfoText"
+                               Grid.Row="3"
+                               Text="ファイルを選択してください"
+                               Foreground="#6C757D"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               LineHeight="17"/>
+                </Grid>
+
+                <!-- 縦区切り線 -->
+                <Rectangle Grid.Column="1" Fill="#DEE2E6" Margin="0,4"/>
+
+                <!-- ═══ 右列：リネーム設定 ═══ -->
+                <Grid Grid.Column="2" Margin="12,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- ベース名 -->
+                    <TextBlock Grid.Row="0" Text="ベース名" Style="{StaticResource SecLabel}"/>
+                    <TextBox   Grid.Row="1" x:Name="BaseNameBox"
+                               Style="{StaticResource FlatEntry}"
+                               Margin="0,0,0,12"
+                               TextChanged="BaseNameBox_TextChanged"/>
+
+                    <!-- 日付オプション -->
+                    <TextBlock Grid.Row="2" Text="日付オプション" Style="{StaticResource SecLabel}"/>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,5">
+                        <CheckBox x:Name="UseYearChk"  Content="西暦" Margin="0,0,10,0"
+                                  Checked="DateOpt_Changed" Unchecked="DateOpt_Changed"/>
+                        <CheckBox x:Name="UseMonthChk" Content="月"   Margin="0,0,10,0"
+                                  Checked="DateOpt_Changed" Unchecked="DateOpt_Changed"/>
+                        <CheckBox x:Name="UseDayChk"   Content="日"
+                                  Checked="DateOpt_Changed" Unchecked="DateOpt_Changed"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,10">
+                        <ComboBox x:Name="YearCombo"  Width="72" Margin="0,0,6,0"
+                                  SelectionChanged="DateCombo_Changed"/>
+                        <ComboBox x:Name="MonthCombo" Width="54" Margin="0,0,6,0"
+                                  SelectionChanged="DateCombo_Changed"/>
+                        <ComboBox x:Name="DayCombo"   Width="54"
+                                  SelectionChanged="DateCombo_Changed"/>
+                    </StackPanel>
+
+                    <CheckBox Grid.Row="5" x:Name="UseUnderscoreChk"
+                              Content="アンダーバー区切り"
+                              Margin="0,0,0,12"
+                              Checked="DateOpt_Changed" Unchecked="DateOpt_Changed"/>
+
+                    <!-- プレビュー -->
+                    <TextBlock Grid.Row="6" Text="プレビュー" Style="{StaticResource SecLabel}"/>
+                    <Border Grid.Row="7"
+                            Background="#EFF6FF" CornerRadius="4"
+                            Padding="8,5" Margin="0,0,0,14">
+                        <TextBlock x:Name="PreviewText"
+                                   Text="（ベース名を入力してください）"
+                                   Foreground="#0D6EFD"
+                                   FontWeight="Bold"
+                                   FontSize="13"
+                                   TextWrapping="Wrap"/>
+                    </Border>
+
+                    <!-- 区切り線 -->
+                    <Rectangle Grid.Row="8" Height="1" Fill="#DEE2E6" Margin="0,0,0,12"/>
+
+                    <!-- 移動先フォルダ -->
+                    <TextBlock Grid.Row="9" Text="移動先フォルダ" Style="{StaticResource SecLabel}"/>
+
+                    <DockPanel Grid.Row="10" LastChildFill="True" Margin="0,0,0,10">
+                        <Button DockPanel.Dock="Left"
+                                Content="フォルダ選択"
+                                Style="{StaticResource FlatBtn}"
+                                Background="#6C757D"
+                                Padding="10,5"
+                                Margin="0,0,7,0"
+                                Click="DestSelectBtn_Click"/>
+                        <TextBox x:Name="DestPathBox"
+                                 Style="{StaticResource FlatEntry}"
+                                 Background="#F8F9FA"
+                                 IsReadOnly="True"/>
+                    </DockPanel>
+
+                    <!-- 実行ボタン -->
+                    <StackPanel Grid.Row="11" Orientation="Horizontal">
+                        <Button Content="  実行  "
+                                Style="{StaticResource FlatBtn}"
+                                Background="#198754"
+                                FontWeight="Bold"
+                                FontSize="14"
+                                Padding="18,9"
+                                Click="ExecuteBtn_Click"/>
+                        <TextBlock x:Name="StatusText"
+                                   VerticalAlignment="Center"
+                                   FontSize="13"
+                                   Margin="12,0,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

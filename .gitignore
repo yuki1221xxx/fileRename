@@ -1,5 +1,11 @@
 /build
 /config.json
 /dist
+/dist_final
+/dist_wpf
+/dist_wpf_small
 /main.spec
+/FileRename.spec
 /__pycache__
+/csharp/bin
+/csharp/obj

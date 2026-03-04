@@ -2,10 +2,8 @@ import sys
 import os
 import shutil
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
-
-import ttkbootstrap as tb
 
 from file_row_widget import FileRowWidget
 from utils import (
@@ -16,174 +14,161 @@ from utils import (
     normalize_row_configs,
 )
 
+APP_BG = "#eef0f3"
+CARD_BG = "#ffffff"
+
+
+def _btn(parent, text, cmd, bg="#6c757d", font_bold=False, px=10, py=5):
+    f = ("Meiryo UI", 10, "bold") if font_bold else ("Meiryo UI", 10)
+    r = max(0, int(bg[1:3], 16) - 30)
+    g = max(0, int(bg[3:5], 16) - 30)
+    b = max(0, int(bg[5:7], 16) - 30)
+    dark = f"#{r:02x}{g:02x}{b:02x}"
+    return tk.Button(
+        parent, text=text, command=cmd,
+        bg=bg, fg="white", activebackground=dark, activeforeground="white",
+        font=f, relief="flat", cursor="hand2", padx=px, pady=py,
+    )
+
+
+def _setup_styles(app):
+    s = ttk.Style(app)
+    s.theme_use("clam")
+    F = ("Meiryo UI", 10)
+    FB = ("Meiryo UI", 10, "bold")
+    s.configure(".", font=F, background=APP_BG)
+    s.configure("TFrame", background=APP_BG)
+    s.configure("TLabel", background=APP_BG, font=F)
+    s.configure("TScrollbar", troughcolor="#dee2e6", background="#adb5bd", arrowcolor="#6c757d")
+    s.configure("TNotebook", background=APP_BG, tabmargins=[2, 0, 0, 0])
+    s.configure("TNotebook.Tab", font=FB, padding=(18, 7))
+    s.map("TNotebook.Tab",
+          background=[("selected", CARD_BG), ("!selected", "#d3d7db")],
+          foreground=[("selected", "#212529"), ("!selected", "#495057")])
+    s.configure("TEntry", fieldbackground=CARD_BG, padding=5)
+    s.configure("TCombobox", fieldbackground=CARD_BG, padding=5)
+    s.map("TCombobox", fieldbackground=[("readonly", CARD_BG), ("disabled", "#e9ecef")])
+    s.map("TEntry", fieldbackground=[("disabled", "#e9ecef"), ("readonly", "#e9ecef")])
+
 
 def main():
-    # 初回分がなければ5行つくる
-    ensure_initial_config(default_rows=5)
-    # 起動時点で欠番があっても詰めておく
+    ensure_initial_config(default_rows=3)
     normalize_row_configs()
 
-    app = tb.Window(themename="cosmo")
-    app.title("ファイル一括リネーム＆移動")
+    app = tk.Tk()
+    app.title("ファイル リネーム & 移動")
+    app.configure(bg=APP_BG)
 
-    screen_w = app.winfo_screenwidth()
-    screen_h = app.winfo_screenheight()
-    width = min(max(1024, int(screen_w * 0.96)), screen_w - 10)
-    height = min(max(720, int(screen_h * 0.94)), screen_h - 30)
-    app.geometry(f"{width}x{height}+10+10")
-    try:
-        app.state("zoomed")  # Windowsなら最大化して大きく見せる
-    except Exception:
-        pass
-    app.minsize(820, 560)
+    sw, sh = app.winfo_screenwidth(), app.winfo_screenheight()
+    w = min(1020, sw - 60)
+    h = min(760, sh - 80)
+    app.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+    app.minsize(720, 520)
 
-    style = app.style
-    base_font = ("Meiryo UI", 12)
-    small_font = ("Meiryo UI", 11)
-    app.tk.call("tk", "scaling", 1.2)
-    app.option_add("*Font", base_font)
-    app.option_add("*Listbox.font", base_font)
-    app.option_add("*TEntry.Font", base_font)
-    app.option_add("*TCombobox*Listbox.font", base_font)
-    style.configure(".", font=base_font)
-    style.configure("TNotebook.Tab", font=("Meiryo UI", 12, "bold"), padding=(14, 8))
-    style.configure("TButton", font=base_font, padding=8)
-    style.configure("TLabel", font=base_font)
-    style.configure("TEntry", font=base_font, padding=8)
-    style.configure("TCombobox", font=base_font)
-    style.configure("TCheckbutton", font=small_font)
+    _setup_styles(app)
 
-    # ノートブック（タブ）を用意
-    notebook = tb.Notebook(app)
-    notebook.pack(fill="both", expand=True)
+    nb = ttk.Notebook(app)
+    nb.pack(fill="both", expand=True, padx=8, pady=8)
 
-    # === リネームタブ ===
-    rename_tab = tb.Frame(notebook)
-    notebook.add(rename_tab, text="リネーム")
+    # ─── リネームタブ ───────────────────────────────────────────
+    rename_tab = tk.Frame(nb, bg=APP_BG)
+    nb.add(rename_tab, text="  リネーム  ")
 
-    # 全体ラッパー
-    root_frame = tb.Frame(rename_tab)
-    root_frame.pack(fill="both", expand=True)
-
-    # ───────── 上：ヘッダー（固定）─────────
-    header = tb.Frame(root_frame)
-    header.pack(side="top", fill="x", padx=5, pady=5)
-
-    # ───────── 下：スクロール領域（Canvas方式）─────────
-    scroll_frame = tb.Frame(root_frame)
-    scroll_frame.pack(side="top", fill="both", expand=True)
-
-    canvas = tb.Canvas(scroll_frame, highlightthickness=0)
-    canvas.pack(side="left", fill="both", expand=True)
-
-    v_scroll = tb.Scrollbar(scroll_frame, orient="vertical", command=canvas.yview)
-    v_scroll.pack(side="right", fill="y")
-    canvas.configure(yscrollcommand=v_scroll.set)
-
-    # キャンバスの中に実際の行を並べるフレームを1つ置く
-    rows_container = tb.Frame(canvas)
-    container_id = canvas.create_window((0, 0), window=rows_container, anchor="nw")
-
-    def on_canvas_configure(event):
-        # 横幅はキャンバスに合わせる
-        canvas.itemconfig(container_id, width=event.width)
-        # 必ず(0,0)に固定
-        try:
-            canvas.moveto(container_id, 0, 0)
-        except Exception:
-            canvas.coords(container_id, 0, 0)
-
-    canvas.bind("<Configure>", on_canvas_configure)
+    header = tk.Frame(rename_tab, bg=APP_BG)
+    header.pack(fill="x", padx=8, pady=(6, 4))
 
     widgets = {}
 
-    # 一番上を表示する共通関数
-    def reset_scroll_to_top():
-        app.update_idletasks()
+    def build_rows():
+        for w_obj in widgets.values():
+            w_obj.destroy()
+        widgets.clear()
+        for idx in get_row_indices():
+            w_obj = FileRowWidget(rows_container, idx, on_delete=handle_delete)
+            widgets[idx] = w_obj
+            w_obj.frame.pack(fill="x", padx=6, pady=6)
+        rows_container.update_idletasks()
         canvas.configure(scrollregion=canvas.bbox("all"))
-        try:
-            canvas.moveto(container_id, 0, 0)
-        except Exception:
-            canvas.coords(container_id, 0, 0)
         canvas.yview_moveto(0.0)
 
-    # ───────── 行を全部作り直す関数 ─────────
-    def build_rows():
-        for w in widgets.values():
-            w.destroy()
-        widgets.clear()
-
-        indices = get_row_indices()
-        for idx in indices:
-            w = FileRowWidget(rows_container, idx, on_delete=handle_delete)
-            widgets[idx] = w
-            w.card.grid(row=idx, column=0, sticky="nsew", padx=5, pady=5)
-
-        rows_container.columnconfigure(0, weight=1)
-        reset_scroll_to_top()
-        app.after(60, reset_scroll_to_top)
-
-    # ───────── 削除時の処理 ─────────
-    def handle_delete(idx: int):
+    def handle_delete(idx):
         delete_row_config(idx)
         normalize_row_configs()
         build_rows()
 
-    # ───────── 行追加ボタン ─────────
     def add_new_row():
         normalize_row_configs()
-        indices = get_row_indices()
-        next_index = len(indices)
-        add_row_config(next_index)
+        add_row_config(len(get_row_indices()))
         build_rows()
 
-    add_btn = tb.Button(header, text="＋ 行を追加", bootstyle="primary", command=add_new_row)
-    add_btn.pack(side="left")
+    _btn(header, "＋ 行を追加", add_new_row, bg="#0d6efd", font_bold=True).pack(side="left")
 
-    # ───────── マウスホイールでスクロールできるようにする ─────────
-    def _on_mousewheel(event):
-        # Windows / 一部Linux
-        delta = event.delta
-        if sys.platform.startswith("win"):
-            # 120 が1ノッチ
-            canvas.yview_scroll(int(-1 * (delta / 120)), "units")
-        else:
-            # 他環境でもとりあえずdeltaを見る
-            canvas.yview_scroll(int(-1 * (delta)), "units")
+    scroll_area = tk.Frame(rename_tab, bg=APP_BG)
+    scroll_area.pack(fill="both", expand=True)
 
-    def _on_mousewheel_linux(event):
-        # LinuxでButton-4/5を使う場合
-        if event.num == 4:
-            canvas.yview_scroll(-1, "units")
-        elif event.num == 5:
-            canvas.yview_scroll(1, "units")
+    canvas = tk.Canvas(scroll_area, bg=APP_BG, highlightthickness=0)
+    canvas.pack(side="left", fill="both", expand=True)
 
-    # どのウィジェットにフォーカスがあってもスクロールできるように全体にバインド
-    app.bind_all("<MouseWheel>", _on_mousewheel)
-    app.bind_all("<Button-4>", _on_mousewheel_linux)
-    app.bind_all("<Button-5>", _on_mousewheel_linux)
+    vsb = ttk.Scrollbar(scroll_area, orient="vertical", command=canvas.yview)
+    vsb.pack(side="right", fill="y")
+    canvas.configure(yscrollcommand=vsb.set)
 
-    # 初期の行を表示
+    rows_container = tk.Frame(canvas, bg=APP_BG)
+    cid = canvas.create_window((0, 0), window=rows_container, anchor="nw")
+
+    canvas.bind("<Configure>", lambda e: canvas.itemconfig(cid, width=e.width))
+    rows_container.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all")),
+    )
+
+    def _close_combobox_popup():
+        # スクロール前に開いているComboboxのドロップダウンを閉じる
+        try:
+            app.tk.eval("catch {ttk::combobox::Unpost}")
+        except Exception:
+            pass
+
+    def _on_wheel(event):
+        _close_combobox_popup()
+        canvas.yview_scroll(int(-event.delta / 120), "units")
+
+    def _safe_yview(*args):
+        _close_combobox_popup()
+        canvas.yview(*args)
+
+    vsb.configure(command=_safe_yview)
+    app.bind_all("<MouseWheel>", _on_wheel)
+
     build_rows()
 
-    # === ZIP化タブ ===
-    zip_tab = tb.Frame(notebook)
-    notebook.add(zip_tab, text="ZIP化")
+    # ─── ZIPタブ ────────────────────────────────────────────────
+    zip_tab = tk.Frame(nb, bg=APP_BG)
+    nb.add(zip_tab, text="  ZIP化  ")
 
-    zip_frame = tb.Labelframe(zip_tab, text="フォルダをZIP化", bootstyle="secondary")
-    zip_frame.pack(fill="x", padx=10, pady=10)
-    zip_frame.columnconfigure(1, weight=1)
+    border_outer = tk.Frame(zip_tab, bg="#c8cdd4")
+    border_outer.pack(fill="x", padx=20, pady=20)
+    card = tk.Frame(border_outer, bg=CARD_BG)
+    card.pack(fill="both", expand=True, padx=1, pady=1)
+
+    ch = tk.Frame(card, bg="#495057")
+    ch.pack(fill="x")
+    tk.Label(ch, text="  フォルダをZIP化", bg="#495057", fg="white",
+             font=("Meiryo UI", 11, "bold"), anchor="w", pady=8).pack(fill="x")
+
+    body = tk.Frame(card, bg=CARD_BG)
+    body.pack(fill="x", padx=16, pady=14)
+    body.columnconfigure(1, weight=1)
 
     zip_source = tk.StringVar()
     zip_dest = tk.StringVar()
     zip_name = tk.StringVar()
-    zip_status = tk.StringVar()
+    zip_status_var = tk.StringVar()
 
     def choose_zip_source():
         folder = filedialog.askdirectory()
         if folder:
             zip_source.set(folder)
-            # 初期値として親フォルダとフォルダ名を提案
             if not zip_dest.get():
                 zip_dest.set(str(Path(folder).parent))
             if not zip_name.get():
@@ -194,64 +179,57 @@ def main():
         if folder:
             zip_dest.set(folder)
 
-    def set_status(message, style="info"):
-        zip_status.set(message)
-        color = {"info": "info", "success": "success", "danger": "danger"}.get(style, "info")
-        status_label.configure(bootstyle=color)
-
     def perform_zip():
         src = zip_source.get()
         dest_dir = zip_dest.get()
         name = zip_name.get().strip()
-
         if not src or not os.path.isdir(src):
-            set_status("⚠ フォルダが選択されていません", "danger")
+            zip_status_var.set("⚠ フォルダが選択されていません")
+            status_lbl.configure(fg="#dc3545")
             return
         if not dest_dir:
-            set_status("⚠ 保存先フォルダを指定してください", "danger")
+            zip_status_var.set("⚠ 保存先フォルダを指定してください")
+            status_lbl.configure(fg="#dc3545")
             return
         if not name:
-            set_status("⚠ ZIP名を入力してください", "danger")
+            zip_status_var.set("⚠ ZIP名を入力してください")
+            status_lbl.configure(fg="#dc3545")
             return
-
-        zip_dest_path = Path(dest_dir)
-        if not zip_dest_path.exists():
-            try:
-                zip_dest_path.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
-                messagebox.showerror("エラー", f"保存先フォルダを作成できませんでした:\n{e}")
-                return
-
-        # 拡張子を整理
-        zip_stem = name[:-4] if name.lower().endswith(".zip") else name
-        archive_base = zip_dest_path / zip_stem
-
+        Path(dest_dir).mkdir(parents=True, exist_ok=True)
+        stem = name[:-4] if name.lower().endswith(".zip") else name
         try:
-            out_path = shutil.make_archive(str(archive_base), "zip", root_dir=src)
-            set_status(f"✅ 作成完了: {Path(out_path).name}", "success")
+            out = shutil.make_archive(str(Path(dest_dir) / stem), "zip", root_dir=src)
+            zip_status_var.set(f"✅ 完了: {Path(out).name}")
+            status_lbl.configure(fg="#198754")
         except Exception as e:
-            messagebox.showerror("エラー", f"ZIP作成中に問題が発生しました:\n{e}")
-            set_status("⚠ 失敗しました", "danger")
+            messagebox.showerror("エラー", str(e))
+            zip_status_var.set("⚠ 失敗しました")
+            status_lbl.configure(fg="#dc3545")
 
-    tb.Label(zip_frame, text="対象フォルダ").grid(row=0, column=0, sticky="w", padx=5, pady=3)
-    btn_src = tb.Button(zip_frame, text="フォルダ選択", bootstyle="primary", command=choose_zip_source)
-    btn_src.grid(row=0, column=2, sticky="e", padx=5, pady=3)
-    tb.Entry(zip_frame, textvariable=zip_source, state="readonly").grid(row=0, column=1, sticky="ew", padx=5, pady=3)
+    def zip_row(row, label, var, btn_text, btn_cmd, btn_color="#6c757d"):
+        tk.Label(body, text=label, bg=CARD_BG, font=("Meiryo UI", 10), anchor="w")\
+            .grid(row=row, column=0, sticky="w", pady=5, padx=(0, 12))
+        ttk.Entry(body, textvariable=var, state="readonly")\
+            .grid(row=row, column=1, sticky="ew", pady=5)
+        _btn(body, btn_text, btn_cmd, bg=btn_color, px=10, py=4)\
+            .grid(row=row, column=2, sticky="e", pady=5, padx=(8, 0))
 
-    tb.Label(zip_frame, text="保存先フォルダ").grid(row=1, column=0, sticky="w", padx=5, pady=3)
-    btn_dest = tb.Button(zip_frame, text="保存先選択", bootstyle="secondary", command=choose_zip_dest)
-    btn_dest.grid(row=1, column=2, sticky="e", padx=5, pady=3)
-    tb.Entry(zip_frame, textvariable=zip_dest, state="readonly").grid(row=1, column=1, sticky="ew", padx=5, pady=3)
+    zip_row(0, "対象フォルダ", zip_source, "選択", choose_zip_source, "#0d6efd")
+    zip_row(1, "保存先フォルダ", zip_dest, "選択", choose_zip_dest, "#6c757d")
 
-    tb.Label(zip_frame, text="ZIPファイル名").grid(row=2, column=0, sticky="w", padx=5, pady=3)
-    tb.Entry(zip_frame, textvariable=zip_name).grid(row=2, column=1, sticky="ew", padx=5, pady=3)
-    tb.Label(zip_frame, text=".zip は自動で付きます").grid(row=2, column=2, sticky="e", padx=5, pady=3)
+    tk.Label(body, text="ZIPファイル名", bg=CARD_BG, font=("Meiryo UI", 10), anchor="w")\
+        .grid(row=2, column=0, sticky="w", pady=5, padx=(0, 12))
+    ttk.Entry(body, textvariable=zip_name)\
+        .grid(row=2, column=1, sticky="ew", pady=5)
+    tk.Label(body, text="(.zip 自動付加)", bg=CARD_BG, font=("Meiryo UI", 9), fg="#6c757d")\
+        .grid(row=2, column=2, sticky="e", padx=(8, 0), pady=5)
 
-    action_row = tb.Frame(zip_frame)
-    action_row.grid(row=3, column=0, columnspan=3, sticky="w", padx=5, pady=8)
-    tb.Button(action_row, text="ZIP化する", bootstyle="success", command=perform_zip).pack(side="left")
-    status_label = tb.Label(action_row, textvariable=zip_status, bootstyle="info")
-    status_label.pack(side="left", padx=10)
+    ar = tk.Frame(body, bg=CARD_BG)
+    ar.grid(row=3, column=0, columnspan=3, sticky="w", pady=(12, 4))
+    _btn(ar, "  ZIP化する  ", perform_zip, bg="#198754", font_bold=True, py=6).pack(side="left")
+    status_lbl = tk.Label(ar, textvariable=zip_status_var, bg=CARD_BG,
+                          font=("Meiryo UI", 10), fg="#198754")
+    status_lbl.pack(side="left", padx=12)
 
     app.mainloop()
 
